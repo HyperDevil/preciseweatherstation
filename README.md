@@ -14,12 +14,15 @@
 * Atmel 328P chip (or complete Arduino)
 * Prototyping boards
 * RFM69HCW Transceiver Radio
-* 5v power supply (battery, psu, solar...)
 * Soldering skills incl. soldering iron, tin, sponge
 * Arduino IDE and a way to program the 328P (directly on arduino, ZIF TX/RX, FTDI etc.)
 * Different color wiring 22 AWG minimum
-* Housing for outdoor and indoor (can 3d print but should be white and ABS outdoor) stevenson screen / radiation shield
-  I used the Davis https://www.davisinstruments.com/product/radiation-shield/ shield, cheapest i could find and reasonable quality
+* Davis radiation shield 7714 or equivalent https://www.davisinstruments.com/product/radiation-shield/
+* 5v power supply, for example a Mean Well 1297280
+* Silicone (for outdoor use)
+* outdoor housing, minimal IP65 rated and water proof wire pass-troughs
+* Flux cleaner spray
+* PCB protection spray (do not spray the sensors or the connection pins!)
 
 ## Software:
 * Arduino IDE
