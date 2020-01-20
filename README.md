@@ -23,9 +23,9 @@
 ## Software:
 * Arduino IDE
 * Libraries: 
- ** https://github.com/adafruit/Adafruit_SHT31
- ** https://github.com/adafruit/Adafruit_BMP3XX
- ** https://github.com/PaulStoffregen/RadioHead
+ * https://github.com/adafruit/Adafruit_SHT31
+ * https://github.com/adafruit/Adafruit_BMP3XX
+ * https://github.com/PaulStoffregen/RadioHead
 
 You can get the sensors from multiple vendors, some already use breakout boards which will make the 
 build easier. Make sure the outdoor sensors are covered so they dont get wet. Always use i2c.
