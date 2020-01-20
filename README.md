@@ -18,7 +18,8 @@
 * Soldering skills incl. soldering iron, tin, sponge
 * Arduino IDE and a way to program the 328P (directly on arduino, ZIF TX/RX, FTDI etc.)
 * Different color wiring 22 AWG minimum
-* Housing for outdoor and indoor (can 3d print but should be white and ABS outdoor)
+* Housing for outdoor and indoor (can 3d print but should be white and ABS outdoor) stevenson screen / radiation shield
+  I used the Davis https://www.davisinstruments.com/product/radiation-shield/ shield, cheapest i could find and reasonable quality
 
 ## Software:
 * Arduino IDE
