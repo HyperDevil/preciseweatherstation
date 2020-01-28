@@ -6,6 +6,7 @@
 * high precision barometric pressure max 0.5 hPa deviation
 * outdoor unit is wireless 868 mhz (EU) with CRC (possibly encryption)
 * possible to add more sensors later (i2c is possibly the easiest option)
+* send data to database / MQTT etc.
 
 ## Parts:
 * SHT-35D Temperature / Humidity sensor by Sensirion with IP67 cap (for outdoor)
@@ -13,7 +14,7 @@
 * BMP388 Temperature / Barometric pressure sensor by Bosch
 * Atmel 328P chip (or complete Arduino)
 * Prototyping boards
-* RFM69HCW Transceiver Radio
+* 2x RFM69HCW Transceiver Radio (+ SMA connectors and antenna, or just use a wire)
 * Soldering skills incl. soldering iron, tin, sponge
 * Arduino IDE and a way to program the 328P (directly on arduino, ZIF TX/RX, FTDI etc.)
 * Different color wiring 22 AWG minimum
@@ -23,6 +24,8 @@
 * outdoor housing, minimal IP65 rated and water proof wire pass-troughs
 * Flux cleaner spray
 * PCB protection spray (do not spray the sensors or the connection pins!)
+* Arduino MKR equivalent with Wifi (MKR 1010 for example)
+
 
 ## Software:
 * Arduino IDE
