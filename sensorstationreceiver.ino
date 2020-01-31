@@ -1,21 +1,19 @@
 #include <RH_RF69.h>
 #include <WiFiNINA.h>
-#include <ArduinoBearSSL.h>
 #include <ArduinoMqttClient.h>
-#include <ArduinoECCX08.h>
 #include "arduino_secrets.h"
+#include <Adafruit_Sensor.h>
+#include "Seeed_SHT35.h"
+#include <utility/wifi_drv.h>
 
-/************ Secrets setup ***************/
+/************ Secrets setup for Wifi***************/
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
-const char broker[] = SECRET_BROKER;
-const char* certificate = SECRET_CERTIFICATE;
 
 /************ Initialize classes ***************/
 int status = WL_IDLE_STATUS;
-WiFiClient client;
-BearSSLClient sslClient(client);
-MqttClient mqttClient(sslClient);
+WiFiSSLClient client; //SSL Support
+MqttClient mqttClient(client); //pass ssl support to mqtt
 
 /************ Radio setup ***************/
 // Change to 434.0 or other frequency, must match RX's freq!
@@ -27,15 +25,35 @@ MqttClient mqttClient(sslClient);
 #define TX_POWER      18
 RH_RF69 rf69(RFM69_CS, RFM69_INT);
 
-unsigned long lastMillis = 0;
+#define SDAPIN  A4
+#define SCLPIN  A5
+#define RSTPIN  2
+SHT35 sensor(SCLPIN);
 
+const char MQTT_SERVER[] = SECRET_BROKER;
+#define MQTT_PORT 8883
+const char MQTT_PASSWORD[] = SECRET_PASSWORD;
+const char MQTT_USERNAME[] = SECRET_MQTT_USER;
+
+
+//start setup
 void setup() 
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   //while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
-  Serial.println("Booting Arduino MKR 1010 Wifi....");
 
+  delay(5000); //so we can catch the first messages on usb-to-serial
+
+  Serial.println("Booting Arduino MKR 1010 Wifi....");
+  
+  delay(100);
   Serial.println("Resetting RFM69 module....");
+
+  // wifi leds
+  WiFiDrv::pinMode(25, OUTPUT); //GREEN
+  WiFiDrv::pinMode(26, OUTPUT); //RED
+  WiFiDrv::pinMode(27, OUTPUT); //BLUE
+
   // rf69 manual reset
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, LOW);
@@ -44,41 +62,41 @@ void setup()
   digitalWrite(RFM69_RST, LOW);
   delay(10);
 
-  if (!ECCX08.begin()) {
-    Serial.println("No ECCX08 present!");
-    while (1);
+  //sht35 sensor test
+  if(sensor.init())
+  {
+   Serial.println("SHT-35 sensor error!");
+   while(1);
   }
 
-  //get time from wifi chip
-  ArduinoBearSSL.onGetTime(getTime);
-  //get certificate from slot 0
-  sslClient.setEccSlot(0, certificate);
-  //mqttClient.onMessage(onMessageReceived);
-  
-  
+  //check if the radio is available
   if (!rf69.init()) {
     Serial.println("RFM69 radio init failed");
     while (1);
   }
-  Serial.println("RFM69 radio init OK!");
-  
+  else {
+    Serial.println("RFM69 radio init OK!");
+  }
+
+  //try to set the radio frequency
   if (!rf69.setFrequency(RF69_FREQ)) {
     Serial.println("RFM69 set frequency failed");
   }
+  else {
+    Serial.print("RFM69 TX Power: "); 
+    Serial.print(TX_POWER);
+    Serial.println(" dBm");
+    rf69.setTxPower(TX_POWER, true);  // range from 14-20 for power, 2nd arg must be true for 69HCW
+    // The encryption key has to be the same as the one in the server
+    uint8_t key[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    rf69.setEncryptionKey(key);
+    Serial.print("RFM69 radio @");  
+    Serial.print((int)RF69_FREQ);  
+    Serial.println(" MHz");
+  }
 
-  Serial.print("RFM69 TX Power: "); 
-  Serial.print(TX_POWER);
-  Serial.println(" dBm");
-  rf69.setTxPower(TX_POWER, true);  // range from 14-20 for power, 2nd arg must be true for 69HCW
+} //end setup
 
-  // The encryption key has to be the same as the one in the server
-  uint8_t key[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-  rf69.setEncryptionKey(key);
-  
-  Serial.print("RFM69 radio @");  
-  Serial.print((int)RF69_FREQ);  
-  Serial.println(" MHz");
-}
 
 // start permanent loop
 void loop() {
@@ -90,6 +108,33 @@ void loop() {
    if (!mqttClient.connected()) {
     // MQTT client is disconnected, connect
     connectMQTT();
+   }
+
+   //avoid being disconnected
+   mqttClient.poll();
+
+   //sht35 values
+   u16 value=0;
+   u8 data[6]={0};
+   float sht35temp,sht35hum;
+
+   if(NO_ERROR!=sensor.read_meas_data_single_shot(HIGH_REP_WITH_STRCH,&sht35temp,&sht35hum))
+   {
+      Serial.println("SHT35 reading temperature failed!");
+   }
+   else
+   {
+      if (sht35temp > -30 && sht35temp < 70 && sht35hum > 0 && sht35hum < 110) //we need to check for sanity here
+      { 
+         publishMessage(sht35temp,(char *)"weather/**/inside_temperature");
+         publishMessage(sht35hum,(char *)"weather/**/inside_humidity");
+         
+         //blink LED
+         WiFiDrv::digitalWrite(26, HIGH);
+         delay(150);
+         WiFiDrv::digitalWrite(26, LOW);
+         delay(150);
+      }
    }
 
    if (rf69.available()) {
@@ -110,6 +155,11 @@ void loop() {
       Serial.print("RSSI: ");
       Serial.println(rf69.lastRssi(), DEC);
 
+      //blink LED
+      WiFiDrv::digitalWrite(27, HIGH);
+      delay(150);
+      WiFiDrv::digitalWrite(27, LOW);
+      
       char *array[4];
       char separator[] = ":";
       char *segmentPointer = strtok((char*)buf, separator);
@@ -125,26 +175,34 @@ void loop() {
 
       float rssi = (float)rf69.lastRssi();
       float t1 = atof(array[0]);
-      //char* t1 = array[0];
       float t2 = atof(array[1]);
       float h = atof(array[2]);
       float p = atof(array[3]);
-      Serial.print("Temperature Outside= "); Serial.print(t1);
-      Serial.print(" Temperature Enclosure= "); Serial.print(array[1]);
-      Serial.print(" Rel. Humidity= "); Serial.print(array[2]);
-      Serial.print(" Pressure= "); Serial.println(array[3]);
-      
+
+      //check if we have all the data
       if (t1 != '\0' && t2 != '\0' && h != '\0' && p != '\0') {
-         publishMessage(t1,(char *)"yourtopic/outside_temperature");
-         publishMessage(t2,(char *)"yourtopic/outside_enclosure_temperature");
-         publishMessage(h,(char *)"yourtopic/outside_relative_humidity");
-         publishMessage(p,(char *)"yourtopic/outside_pressure");
-         publishMessage(rssi,(char *)"yourtopic/rssi_received");
+         //send ack back to radio that all is OK
+         delay(150);
+         char radiopacket[5] = "ACK";
+         rf69.send((uint8_t *)radiopacket, strlen(radiopacket));
+         
+         //blink LED
+         WiFiDrv::digitalWrite(25, HIGH);
+         delay(150);
+         WiFiDrv::digitalWrite(25, LOW);
+         
+         if (t1 > -50 && t1 < 80) { publishMessage(t1,(char *)"weather/**/outside_temperature"); } //check for sanity
+         if (t2 > -10 && t2 < 80) { publishMessage(t2,(char *)"weather/**/outside_enclosure_temperature"); } //check for sani
+         if (h > 0 && h < 110) { publishMessage(h,(char *)"weather/**/outside_relative_humidity"); } //check for sanity
+         if (p > 900 && p < 1100) { publishMessage(p,(char *)"weather/**/outside_pressure"); } // check for sanity
+         publishMessage(rssi,(char *)"weather/**/rssi_received"); //we dont care about this really its already set
       }
-    
-     }
-   } 
-}//end void loop
+
+    }
+  } 
+
+  delay(25000);
+} //end void loop
 
 
 void printWifiData() {
@@ -197,24 +255,25 @@ void printMacAddress(byte mac[]) {
   Serial.println();
 }
 
-unsigned long getTime() {
-  // get the current time from the WiFi module  
-  return WiFi.getTime();
-}
-
 void connectMQTT() {
-  Serial.print("Attempting to MQTT broker: ");
-  Serial.print(broker);
-  Serial.println(" ");
+  Serial.print("Connecting to MQTT broker: ");
+  Serial.println(MQTT_SERVER);
 
-  while (!mqttClient.connect(broker, 8883)) {
+  mqttClient.setUsernamePassword(MQTT_USERNAME,MQTT_PASSWORD);
+  while (!mqttClient.connect(MQTT_SERVER,MQTT_PORT)) {
+
+   //also check wifi
+   if (WiFi.status() != WL_CONNECTED) {
+      connectWiFi();
+   }
+    
     // failed, retry
     Serial.print(".");
-    delay(3000);
+    delay(2000);
   }
-  Serial.println();
 
-  Serial.println("Connected to AWS IoT");
+  Serial.println();
+  Serial.println("Connected to MQTT broker");
 }
 
 void connectWiFi() {
@@ -233,7 +292,6 @@ void connectWiFi() {
 }
 
 void publishMessage(float value, char* topic) {
-// send message, the Print interface can be used to set the message contents
   mqttClient.beginMessage(topic);
   mqttClient.print(value);
   mqttClient.print(millis());
